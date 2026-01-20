@@ -1,134 +1,210 @@
-/* main.c */
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/l2cap.h>
+#include <zephyr/bluetooth/uuid.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(l2cap_rx, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(l2cap_sender, LOG_LEVEL_INF);
 
-/* Protocol & MTU Config */
-#define L2CAP_COC_PSM 0x0080
-#define L2CAP_COC_MTU 253
+/* ---------------- Configuration ---------------- */
+#define PEER_PSM         0x0080  // [중요] 수신측(Server)과 반드시 동일해야 함
+#define DATA_SIZE        218     // 전송할 데이터 크기
+#define TX_INTERVAL_MS   10      // 전송 주기 (최대한 빠르게)
+#define TARGET_DEVICE_NAME "Zephyr_L2CAP_Rx_L"
+#define TARGET_NAME_LEN    (sizeof(TARGET_DEVICE_NAME) - 1)
 
-/* Memory Pool */
-NET_BUF_POOL_DEFINE(l2cap_rx_pool, 10, 256, 0, NULL);
+/* ---------------- Globals ---------------- */
+static struct bt_conn *default_conn;
+static struct bt_l2cap_le_chan l2cap_chan; // L2CAP 채널 객체
+static uint8_t data_buffer[DATA_SIZE];     // 더미 데이터 버퍼
 
-/* 전역 채널 객체 (LE 전용 구조체 사용) */
-static struct bt_l2cap_le_chan my_le_chan;
-
-/* * [Callback 1] Data Received 
- * 파라미터로 넘어오는 'chan'은 Base 구조체이므로 rx/tx 멤버가 없음.
- */
-static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
+/* ---------------- L2CAP Callbacks ---------------- */
+static void l2cap_chan_connected(struct bt_l2cap_chan *chan)
 {
-    // 필요하다면 여기서 CONTAINER_OF를 써서 LE 채널 정보에 접근
-    // struct bt_l2cap_le_chan *le_chan = CONTAINER_OF(chan, struct bt_l2cap_le_chan, chan);
-    
-    /* 데이터 수신 확인 */
-	memcpy(my_buffer, buf->data, buf->len);
-    LOG_INF("Rx Data: len %u", buf->len);
-
-    /* * 주의: 실제 데이터 처리는 여기서 memcpy 등을 수행.
-     * return 0을 하면 Zephyr 스택이 버퍼 소유권을 가져가서 해제함.
-     */
-    return 0;
+    LOG_INF("L2CAP Channel Connected!");
 }
 
-/* [Callback 2] Connected */
-static void l2cap_connected(struct bt_l2cap_chan *chan)
+static void l2cap_chan_disconnected(struct bt_l2cap_chan *chan)
 {
-    /* Base 포인터를 LE 구조체로 변환하여 MTU 정보 등을 확인 */
-    struct bt_l2cap_le_chan *le_chan = CONTAINER_OF(chan, struct bt_l2cap_le_chan, chan);
-
-    LOG_INF("L2CAP Connected!");
-    LOG_INF(" - RX MTU: %u", le_chan->rx.mtu);
-    LOG_INF(" - TX MTU: %u", le_chan->tx.mtu);
+    LOG_WRN("L2CAP Channel Disconnected");
+    // 필요 시 재연결 로직 추가 가능
 }
 
-/* [Callback 3] Disconnected */
-static void l2cap_disconnected(struct bt_l2cap_chan *chan)
+static void l2cap_chan_status(struct bt_l2cap_chan *chan, atomic_t *status)
 {
-    LOG_INF("L2CAP Disconnected");
+    LOG_INF("L2CAP Channel Status Changed: %lu", *status);
 }
 
-/* [Callback 4] Alloc Buffer */
-static struct net_buf *l2cap_alloc_buf(struct bt_l2cap_chan *chan)
-{
-    /* L2CAP 전용 풀에서 할당 */
-    return net_buf_alloc(&l2cap_rx_pool, K_NO_WAIT);
-}
+// 송신용 메모리 풀 정의 (데이터 패킷용)
+NET_BUF_POOL_DEFINE(tx_pool, 16, DATA_SIZE, 4, NULL);
 
-/* Operations VTable */
 static const struct bt_l2cap_chan_ops l2cap_ops = {
-    .alloc_buf    = l2cap_alloc_buf,
-    .recv         = l2cap_recv,
-    .connected    = l2cap_connected,
-    .disconnected = l2cap_disconnected,
+    .connected = l2cap_chan_connected,
+    .disconnected = l2cap_chan_disconnected,
+    .status = l2cap_chan_status,
+    // 수신은 하지 않으므로 alloc_buf/recv는 NULL 또는 기본값 처리
 };
 
-/* * [Callback 5] Connection Request Acceptor
- * 여기서 LE 구조체의 'rx' 멤버를 초기화해야 함.
- */
-static int l2cap_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
+/* ---------------- Connection Callbacks ---------------- */
+static void connected(struct bt_conn *conn, uint8_t err)
 {
-    LOG_INF("Incoming L2CAP Connection Request");
+    if (err) {
+        LOG_ERR("Connection failed (err 0x%02x)", err);
+        return;
+    }
 
-    /* 1. 구조체 초기화 (재연결 시 잔여 데이터 제거) */
-    memset(&my_le_chan, 0, sizeof(my_le_chan));
+    LOG_INF("ACL Connected");
+    default_conn = bt_conn_ref(conn);
 
-    /* 2. Base 멤버 설정 */
-    my_le_chan.chan.ops = &l2cap_ops;
+    // 1. Connection Parameter Update (속도 향상)
+    struct bt_le_conn_param param = BT_LE_CONN_PARAM_INIT(6, 6, 0, 400); // 7.5ms interval
+    bt_conn_le_param_update(conn, &param);
 
-    /* 3. LE Specific 멤버 설정 (여기가 핵심) */
-    /* Base인 'chan'에는 rx가 없지만, 'bt_l2cap_le_chan'에는 rx가 있음 */
-    my_le_chan.rx.mtu = L2CAP_COC_MTU;
-    
-    /* 4. Base 포인터 반환 (Casting) */
-    *chan = &my_le_chan.chan;
+    // 2. PHY Update (2Mbps)
+    const struct bt_conn_le_phy_param phy_param = {
+        .options = BT_CONN_LE_PHY_OPT_NONE,
+        .pref_tx_phy = BT_GAP_LE_PHY_2M,
+        .pref_rx_phy = BT_GAP_LE_PHY_2M,
+    };
+    bt_conn_le_phy_update(conn, &phy_param);
 
-    return 0; /* Accept */
+    // 3. Initiate L2CAP CoC Connection
+    l2cap_chan.chan.ops = &l2cap_ops;
+    l2cap_chan.rx.mtu = 23; // 수신은 안 하므로 작게 설정 가능
+
+    int ret = bt_l2cap_chan_connect(conn, &l2cap_chan.chan, PEER_PSM);
+    if (ret < 0) {
+        LOG_ERR("L2CAP Connect failed (err %d)", ret);
+    } else {
+        LOG_INF("L2CAP Connect req sent");
+    }
 }
 
-/* Server Definition */
-static struct bt_l2cap_server server = {
-    .psm       = L2CAP_COC_PSM,
-    .sec_level = BT_SECURITY_L1,
-    .accept    = l2cap_accept,
+static void disconnected(struct bt_conn *conn, uint8_t reason)
+{
+    LOG_INF("Disconnected (reason 0x%02x)", reason);
+    if (default_conn) {
+        bt_conn_unref(default_conn);
+        default_conn = NULL;
+    }
+    // 연결 끊김 시 다시 스캔 시작하도록 할 수 있음
+}
+
+BT_CONN_CB_DEFINE(conn_callbacks) = {
+    .connected = connected,
+    .disconnected = disconnected,
 };
 
-/* Advertising Data */
-static const struct bt_data ad[] = {
-    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
-};
+static bool found_target = false;
 
+/* AD(Advertising Data)를 파싱하기 위한 콜백 함수 */
+static bool eir_found(struct bt_data *data, void *user_data)
+{
+    // 데이터 타입이 "Complete Local Name" 또는 "Shortened Local Name" 인지 확인
+    if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
+        // 길이와 내용이 일치하는지 확인
+        if (data->data_len == TARGET_NAME_LEN &&
+            memcmp(data->data, TARGET_DEVICE_NAME, TARGET_NAME_LEN) == 0) {
+            
+            found_target = true; // 찾았음 표시
+            return false; // 파싱 중단 (더 볼 필요 없음)
+        }
+    }
+    return true; // 계속 파싱
+}
+
+/* ---------------- Scanning Logic ---------------- */
+static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
+                         struct net_buf_simple *ad)
+{
+    char addr_str[BT_ADDR_LE_STR_LEN];
+    int err;
+    
+    if (default_conn) return; // 이미 연결 중이면 무시
+    
+    /* 1. 필터링 초기화 */
+    found_target = false;
+
+    /* 2. 광고 데이터 파싱 시작 -> eir_found 함수가 호출됨 */
+    bt_data_parse(ad, eir_found, NULL);
+
+    /* 3. 타겟을 찾았을 때만 연결 시도 */
+    if (found_target) {
+        bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+        LOG_INF("Target Found: %s (RSSI %d). Connecting...", addr_str, rssi);
+
+        err = bt_le_scan_stop();
+        if (err) return;
+
+        err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, 
+                                BT_LE_CONN_PARAM_DEFAULT, &default_conn);
+        if (err) {
+            LOG_ERR("Create conn failed (err %d)", err);
+            bt_le_scan_start(BT_LE_SCAN_PASSIVE, NULL);
+        }
+    }
+}
+
+/* ---------------- Main Logic ---------------- */
 int main(void)
 {
     int err;
 
-    /* Bluetooth Init */
+    LOG_INF("Starting L2CAP CoC Sender on XIAO BLE");
+
+    // Dummy Data Init
+    for(int i=0; i<DATA_SIZE; i++) data_buffer[i] = (uint8_t)i;
+
     err = bt_enable(NULL);
     if (err) {
-        LOG_ERR("bt_enable failed (err %d)", err);
+        LOG_ERR("Bluetooth init failed (err %d)", err);
         return 0;
     }
 
-    /* Register Server */
-    err = bt_l2cap_server_register(&server);
+    LOG_INF("Bluetooth initialized. Scanning...");
+    err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
     if (err) {
-        LOG_ERR("Server register failed (err %d)", err);
+        LOG_ERR("Scanning failed (err %d)", err);
         return 0;
     }
-    LOG_INF("L2CAP Server registered (PSM 0x%04x)", L2CAP_COC_PSM);
 
-    /* Start Advertising */
-    err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
-    if (err) {
-        LOG_ERR("Advertising failed (err %d)", err);
-        return 0;
+    struct net_buf *buf;
+
+    while (1) {
+        // L2CAP 채널이 연결된 상태인지 확인
+        // atomic_get(&l2cap_chan.chan.status) 등을 더 정교하게 체크할 수 있습니다.
+        if (default_conn && l2cap_chan.chan.status == BT_L2CAP_CONNECTED) {
+            
+            // 1. Allocate Buffer
+            // 헤드룸 예약이 필수입니다 (L2CAP 헤더 공간)
+            buf = net_buf_alloc(&tx_pool, K_NO_WAIT);
+            if (!buf) {
+                LOG_WRN("Tx pool empty");
+                k_sleep(K_MSEC(1)); 
+                continue;
+            }
+
+            // 2. L2CAP 헤더 공간 확보
+            net_buf_reserve(buf, BT_L2CAP_SDU_BUF_SIZE(0));
+
+            // 3. 데이터 복사
+            net_buf_add_mem(buf, data_buffer, DATA_SIZE);
+
+            // 4. 전송 (비동기)
+            // L2CAP CoC는 Credit이 없으면 -EAGAIN을 반환하거나 대기합니다.
+            int ret = bt_l2cap_chan_send(&l2cap_chan.chan, buf);
+            if (ret < 0) {
+                // 전송 실패 (주로 Credit 부족) 시 버퍼 해제 필요
+                LOG_DBG("Send fail/busy: %d", ret);
+                net_buf_unref(buf); 
+            } else {
+                // 전송 성공 시 net_buf는 스택이 알아서 해제함
+                // LOG_DBG("Sent %d bytes", DATA_SIZE);
+            }
+        }
+        
+        k_sleep(K_MSEC(TX_INTERVAL_MS));
     }
-    LOG_INF("Advertising started. Waiting for connection...");
-
     return 0;
 }
