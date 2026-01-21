@@ -120,9 +120,15 @@ static void connected(struct bt_conn *conn, uint8_t err)
     LOG_INF("ACL Connected");
     default_conn = bt_conn_ref(conn);
 
+
+    k_sleep(K_MSEC(100));  // 
+
+
     // 1. Connection Parameter Update (속도 향상)
     struct bt_le_conn_param param = BT_LE_CONN_PARAM_INIT(6, 6, 0, 400); // 7.5ms interval
     bt_conn_le_param_update(conn, &param);
+
+    k_sleep(K_MSEC(100));  // S
 
     // 2. PHY Update (2Mbps)
     const struct bt_conn_le_phy_param phy_param = {
