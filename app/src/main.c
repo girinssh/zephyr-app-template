@@ -46,6 +46,69 @@ static const struct bt_l2cap_chan_ops l2cap_ops = {
     // 수신은 하지 않으므로 alloc_buf/recv는 NULL 또는 기본값 처리
 };
 
+static bool found_target = false;
+
+/* AD(Advertising Data)를 파싱하기 위한 콜백 함수 */
+uint8_t dev_name[100] = {0};
+static bool eir_found(struct bt_data *data, void *user_data)
+{
+    // 데이터 타입이 "Complete Local Name" 또는 "Shortened Local Name" 인지 확인
+	bool result = true;
+
+    if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
+		if(data->data_len < 99){
+			memcpy(dev_name, data->data, data->data_len); 
+			LOG_INF("Target Name %s", dev_name);	
+		}
+		// 길이와 내용이 일치하는지 확인
+        if (data->data_len == TARGET_NAME_LEN &&
+            memcmp(data->data, TARGET_DEVICE_NAME, TARGET_NAME_LEN) == 0) {
+            
+            found_target = true; // 찾았음 표시
+            result = false; // 파싱 중단 (더 볼 필요 없음)
+        }
+    }
+    return result; // 계속 파싱
+}
+
+/* ---------------- Scanning Logic ---------------- */
+static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
+                         struct net_buf_simple *ad)
+{
+    char addr_str[BT_ADDR_LE_STR_LEN];
+    int err;
+    
+    if (default_conn) {
+		LOG_INF("device_found: Already Connected");
+		return; // 이미 연결 중이면 무시
+	}
+    /* 1. 필터링 초기화 */
+    found_target = false;
+
+    /* 2. 광고 데이터 파싱 시작 -> eir_found 함수가 호출됨 */
+    bt_data_parse(ad, eir_found, NULL);
+
+    /* 3. 타겟을 찾았을 때만 연결 시도 */
+    if (found_target) {
+        bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+        LOG_INF("device_found: Target Found: %s (RSSI %d). Connecting...", addr_str, rssi);
+
+        err = bt_le_scan_stop();
+        if (err) {
+			LOG_INF("device_found: Failed to Stop Scanning");
+			return;
+		}
+        err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, 
+                                BT_LE_CONN_PARAM_DEFAULT, &default_conn);
+        if (err) {
+            LOG_ERR("device_found: Create conn failed (err %d)", err);
+            bt_le_scan_start(BT_LE_SCAN_PASSIVE, NULL);
+        } else {
+			LOG_INF("device_found: Success Creating Conn");
+		}
+    }
+}
+
 /* ---------------- Connection Callbacks ---------------- */
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -91,73 +154,39 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     // 연결 끊김 시 다시 스캔 시작하도록 할 수 있음
 }
 
-BT_CONN_CB_DEFINE(conn_callbacks) = {
+static void recycled_cb(void){
+	int err;
+    LOG_INF("Bluetooth recycled. Scanning...");
+	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
+    if (err) {
+        LOG_ERR("Scanning failed (err %d)", err);
+        return;
+    }
+}
+
+struct bt_conn_cb conn_callbacks = {
+	.recycled = recycled_cb,
     .connected = connected,
     .disconnected = disconnected,
 };
-
-static bool found_target = false;
-
-/* AD(Advertising Data)를 파싱하기 위한 콜백 함수 */
-static bool eir_found(struct bt_data *data, void *user_data)
-{
-    // 데이터 타입이 "Complete Local Name" 또는 "Shortened Local Name" 인지 확인
-    if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
-        LOG_INF("Target Name %s", data->data);
-		
-		// 길이와 내용이 일치하는지 확인
-        if (data->data_len == TARGET_NAME_LEN &&
-            memcmp(data->data, TARGET_DEVICE_NAME, TARGET_NAME_LEN) == 0) {
-            
-            found_target = true; // 찾았음 표시
-            return false; // 파싱 중단 (더 볼 필요 없음)
-        }
-    }
-    return true; // 계속 파싱
-}
-
-/* ---------------- Scanning Logic ---------------- */
-static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
-                         struct net_buf_simple *ad)
-{
-    char addr_str[BT_ADDR_LE_STR_LEN];
-    int err;
-    
-    if (default_conn) return; // 이미 연결 중이면 무시
-    
-    /* 1. 필터링 초기화 */
-    found_target = false;
-
-    /* 2. 광고 데이터 파싱 시작 -> eir_found 함수가 호출됨 */
-    bt_data_parse(ad, eir_found, NULL);
-
-    /* 3. 타겟을 찾았을 때만 연결 시도 */
-    if (found_target) {
-        bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
-        LOG_INF("Target Found: %s (RSSI %d). Connecting...", addr_str, rssi);
-
-        err = bt_le_scan_stop();
-        if (err) return;
-
-        err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, 
-                                BT_LE_CONN_PARAM_DEFAULT, &default_conn);
-        if (err) {
-            LOG_ERR("Create conn failed (err %d)", err);
-            bt_le_scan_start(BT_LE_SCAN_PASSIVE, NULL);
-        }
-    }
-}
 
 /* ---------------- Main Logic ---------------- */
 int main(void)
 {
     int err;
 
+
     LOG_INF("Starting L2CAP CoC Sender on XIAO BLE");
 
     // Dummy Data Init
     for(int i=0; i<DATA_SIZE; i++) data_buffer[i] = (uint8_t)i;
-
+    
+	err = bt_conn_cb_register(&conn_callbacks);
+    if (err) {
+        LOG_ERR("Connection callback register failed (err %d)", err);
+        return 0;
+    }
+	k_sleep(K_MSEC(100));
     err = bt_enable(NULL);
     if (err) {
         LOG_ERR("Bluetooth init failed (err %d)", err);
@@ -177,7 +206,7 @@ int main(void)
         // L2CAP 채널이 연결된 상태인지 확인
         // atomic_get(&l2cap_chan.chan.status) 등을 더 정교하게 체크할 수 있습니다.
         if (default_conn && *(l2cap_chan.chan.status) == BT_L2CAP_CONNECTED) {
-            
+            LOG_INF("CHECK POINT");
             // 1. Allocate Buffer
             // 헤드룸 예약이 필수입니다 (L2CAP 헤더 공간)
             buf = net_buf_alloc(&tx_pool, K_NO_WAIT);
@@ -206,7 +235,7 @@ int main(void)
             }
         }
 		
-	    LOG_INF("L2CAP CoC Sender is running...");
+	    LOG_INF("L2CAP CoC Sender is running... ");
 
         k_sleep(K_MSEC(TX_INTERVAL_MS));
     }
