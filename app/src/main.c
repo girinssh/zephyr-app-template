@@ -152,17 +152,15 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
+	
+	int err;
     LOG_INF("Disconnected (reason 0x%02x)", reason);
     if (default_conn) {
         bt_conn_unref(default_conn);
         default_conn = NULL;
     }
     // 연결 끊김 시 다시 스캔 시작하도록 할 수 있음
-}
-
-static void recycled_cb(void){
-	int err;
-    LOG_INF("Bluetooth recycled. Scanning...");
+	LOG_INF("Bluetooth Disconnected. Scanning...");
 	err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, device_found);
     if (err) {
         LOG_ERR("Scanning failed (err %d)", err);
@@ -171,7 +169,6 @@ static void recycled_cb(void){
 }
 
 struct bt_conn_cb conn_callbacks = {
-	.recycled = recycled_cb,
     .connected = connected,
     .disconnected = disconnected,
 };
@@ -211,7 +208,7 @@ int main(void)
     while (1) {
         // L2CAP 채널이 연결된 상태인지 확인
         // atomic_get(&l2cap_chan.chan.status) 등을 더 정교하게 체크할 수 있습니다.
-        if (default_conn && *(l2cap_chan.chan.status) == BT_L2CAP_CONNECTED) {
+        if (default_conn && atomic_get(&l2cap_chan.chan.status) == BT_L2CAP_CONNECTED) {
             LOG_INF("CHECK POINT");
             // 1. Allocate Buffer
             // 헤드룸 예약이 필수입니다 (L2CAP 헤더 공간)
@@ -223,7 +220,7 @@ int main(void)
             }
 
             // 2. L2CAP 헤더 공간 확보
-            net_buf_reserve(buf, BT_L2CAP_SDU_BUF_SIZE(0));
+            net_buf_reserve(buf, BT_L2CAP_CHAN_SEND_RESERVE);
 
             // 3. 데이터 복사
             net_buf_add_mem(buf, data_buffer, DATA_SIZE);
