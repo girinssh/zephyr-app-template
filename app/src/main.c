@@ -24,14 +24,19 @@ static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
-#define BT_LE_ADV_CONN BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, \
-	BT_GAP_ADV_FAST_INT_MIN_2, \
-	BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
+    BT_LE_ADV_OPT_CONN,  /* v4.x 표준 옵션 이름 */
+    BT_GAP_ADV_FAST_INT_MIN_2,
+    BT_GAP_ADV_FAST_INT_MAX_2,
+    NULL
+);
+
 /* Advertising 재시작 헬퍼 함수 */
 static void start_advertising(void)
 {
     /* BT_LE_ADV_CONN: 타임아웃 없이 무한히 광고 */
-    int err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), NULL, 0);
+    int err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), NULL, 0);
     if (err) {
         LOG_ERR("Advertising failed to start (err %d)", err);
     } else {
@@ -94,17 +99,11 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     }
 
     /* [Critical] 연결이 끊어지면 즉시 다시 광고 시작 */
-    // start_advertising();
-}
-void recycled_cb(void)
-{
 	printk("Connection object available from previous conn. Disconnect is complete!\n");
-    
     start_advertising();
 }
 /* Connection Callbacks 등록 */
 struct bt_conn_cb conn_callbacks = {
-	.recycled = recycled_cb,
     .connected = connected,
     .disconnected = disconnected,
 };
