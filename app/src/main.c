@@ -10,7 +10,7 @@ LOG_MODULE_REGISTER(l2cap_sender, LOG_LEVEL_INF);
 /* ---------------- Configuration ---------------- */
 #define PEER_PSM         0x0080  // [중요] 수신측(Server)과 반드시 동일해야 함
 #define DATA_SIZE        218     // 전송할 데이터 크기
-#define TX_INTERVAL_MS   10      // 전송 주기 (최대한 빠르게)
+#define TX_INTERVAL_MS   500      // 전송 주기 (최대한 빠르게)
 #define TARGET_DEVICE_NAME "Zephyr_L2CAP_Rx_L"
 #define TARGET_NAME_LEN    (sizeof(TARGET_DEVICE_NAME) - 1)
 
@@ -103,7 +103,9 @@ static bool eir_found(struct bt_data *data, void *user_data)
 {
     // 데이터 타입이 "Complete Local Name" 또는 "Shortened Local Name" 인지 확인
     if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
-        // 길이와 내용이 일치하는지 확인
+        LOG_INF("Target Name %s", data->data);
+		
+		// 길이와 내용이 일치하는지 확인
         if (data->data_len == TARGET_NAME_LEN &&
             memcmp(data->data, TARGET_DEVICE_NAME, TARGET_NAME_LEN) == 0) {
             
@@ -174,7 +176,7 @@ int main(void)
     while (1) {
         // L2CAP 채널이 연결된 상태인지 확인
         // atomic_get(&l2cap_chan.chan.status) 등을 더 정교하게 체크할 수 있습니다.
-        if (default_conn && l2cap_chan.chan.status == BT_L2CAP_CONNECTED) {
+        if (default_conn && *(l2cap_chan.chan.status) == BT_L2CAP_CONNECTED) {
             
             // 1. Allocate Buffer
             // 헤드룸 예약이 필수입니다 (L2CAP 헤더 공간)
@@ -200,10 +202,12 @@ int main(void)
                 net_buf_unref(buf); 
             } else {
                 // 전송 성공 시 net_buf는 스택이 알아서 해제함
-                // LOG_DBG("Sent %d bytes", DATA_SIZE);
+                LOG_DBG("Sent %d bytes", DATA_SIZE);
             }
         }
-        
+		
+	    LOG_INF("L2CAP CoC Sender is running...");
+
         k_sleep(K_MSEC(TX_INTERVAL_MS));
     }
     return 0;
