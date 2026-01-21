@@ -82,11 +82,17 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     }
 
     /* [Critical] 연결이 끊어지면 즉시 다시 광고 시작 */
+    // start_advertising();
+}
+void recycled_cb(void)
+{
+	printk("Connection object available from previous conn. Disconnect is complete!\n");
+    
     start_advertising();
 }
-
 /* Connection Callbacks 등록 */
-BT_CONN_CB_DEFINE(conn_callbacks) = {
+struct bt_conn_cb conn_callbacks = {
+	.recycled = recycled_cb,
     .connected = connected,
     .disconnected = disconnected,
 };
@@ -179,6 +185,7 @@ int main(void)
 
 	LOG_INF("L2CAP Receiver Start");
 
+    err = bt_conn_cb_register(&conn_callbacks);
     /* Bluetooth Init */
     err = bt_enable(NULL);
     if (err) {
