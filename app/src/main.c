@@ -31,7 +31,7 @@ static const struct bt_data ad[] = {
 static void start_advertising(void)
 {
     /* BT_LE_ADV_CONN: 타임아웃 없이 무한히 광고 */
-    int err = bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad), NULL, 0);
+    int err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), NULL, 0);
     if (err) {
         LOG_ERR("Advertising failed to start (err %d)", err);
     } else {
@@ -51,25 +51,34 @@ static void connected(struct bt_conn *conn, uint8_t err)
     LOG_INF("Bluetooth Central Connected!");
     current_conn = bt_conn_ref(conn);
 
+    const struct bt_conn_le_phy_param phy_param = {
+        .options = BT_CONN_LE_PHY_OPT_NONE,
+        .pref_tx_phy = BT_GAP_LE_PHY_2M,
+        .pref_rx_phy = BT_GAP_LE_PHY_2M,
+    };
+    bt_conn_le_phy_update(conn, &phy_param);
+
+
+
     /* [Critical] 속도 향상 요청 (15ms 대응)
      * Min Interval: 7.5ms (6 * 1.25)
      * Max Interval: 15ms  (12 * 1.25)
      * Latency: 0
      * Timeout: 400ms
      */
-    struct bt_le_conn_param param = {
-        .interval_min = 6, 
-        .interval_max = 12, 
-        .latency = 0,
-        .timeout = 400,
-    };
+    // struct bt_le_conn_param param = {
+    //     .interval_min = 6, 
+    //     .interval_max = 12, 
+    //     .latency = 0,
+    //     .timeout = 400,
+    // };
     
-    int ret = bt_conn_le_param_update(conn, &param);
-    if (ret) {
-        LOG_WRN("Connection param update request failed: %d", ret);
-    } else {
-        LOG_INF("Requested Connection Interval Update (7.5ms ~ 15ms)");
-    }
+    // int ret = bt_conn_le_param_update(conn, &param);
+    // if (ret) {
+    //     LOG_WRN("Connection param update request failed: %d", ret);
+    // } else {
+    //     LOG_INF("Requested Connection Interval Update (7.5ms ~ 15ms)");
+    // }
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -182,7 +191,6 @@ int main(void)
 {
     int err;
 
-
 	LOG_INF("L2CAP Receiver Start");
 
     err = bt_conn_cb_register(&conn_callbacks);
@@ -203,7 +211,7 @@ int main(void)
 
 	start_advertising();
 	while(true){
-		LOG_INF("Receiver is Running...");
+		// LOG_INF("Receiver is Running...");
 		k_sleep(K_MSEC(1000));
 	}
 
