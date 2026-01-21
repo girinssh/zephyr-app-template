@@ -107,6 +107,9 @@ int main(void)
 {
     int err;
 
+
+	LOG_INF("L2CAP Receiver Start");
+
     /* Bluetooth Init */
     err = bt_enable(NULL);
     if (err) {
@@ -129,6 +132,12 @@ int main(void)
         return 0;
     }
     LOG_INF("Advertising started. Waiting for connection...");
+
+	while(true){
+		LOG_INF("Receiver is Running...");
+		k_sleep(K_MSEC(1000));
+	}
+
 
     return 0;
 }
