@@ -26,7 +26,7 @@ static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
     // struct bt_l2cap_le_chan *le_chan = CONTAINER_OF(chan, struct bt_l2cap_le_chan, chan);
     
     /* 데이터 수신 확인 */
-	memcpy(my_buffer, buf->data, buf->len);
+	// memcpy(my_buffer, buf->data, buf->len);
     LOG_INF("Rx Data: len %u", buf->len);
 
     /* * 주의: 실제 데이터 처리는 여기서 memcpy 등을 수행.
