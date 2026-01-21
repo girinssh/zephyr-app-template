@@ -51,6 +51,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
     LOG_INF("Bluetooth Central Connected!");
     current_conn = bt_conn_ref(conn);
 
+	k_sleep(K_MSEC(100));
+
     const struct bt_conn_le_phy_param phy_param = {
         .options = BT_CONN_LE_PHY_OPT_NONE,
         .pref_tx_phy = BT_GAP_LE_PHY_2M,
@@ -59,6 +61,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
     bt_conn_le_phy_update(conn, &phy_param);
 
 
+	k_sleep(K_MSEC(100));
 
     /* [Critical] 속도 향상 요청 (15ms 대응)
      * Min Interval: 7.5ms (6 * 1.25)
@@ -66,19 +69,19 @@ static void connected(struct bt_conn *conn, uint8_t err)
      * Latency: 0
      * Timeout: 400ms
      */
-    // struct bt_le_conn_param param = {
-    //     .interval_min = 6, 
-    //     .interval_max = 12, 
-    //     .latency = 0,
-    //     .timeout = 400,
-    // };
+    struct bt_le_conn_param param = {
+        .interval_min = 6, 
+        .interval_max = 12, 
+        .latency = 0,
+        .timeout = 400,
+    };
     
-    // int ret = bt_conn_le_param_update(conn, &param);
-    // if (ret) {
-    //     LOG_WRN("Connection param update request failed: %d", ret);
-    // } else {
-    //     LOG_INF("Requested Connection Interval Update (7.5ms ~ 15ms)");
-    // }
+    int ret = bt_conn_le_param_update(conn, &param);
+    if (ret) {
+        LOG_WRN("Connection param update request failed: %d", ret);
+    } else {
+        LOG_INF("Requested Connection Interval Update (7.5ms ~ 15ms)");
+    }
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -116,7 +119,7 @@ static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
     
     /* 데이터 수신 확인 */
 	// memcpy(my_buffer, buf->data, buf->len);
-    LOG_INF("Rx Data: len %u", buf->len);
+    // LOG_INF("Rx Data: len %u", buf->len);
 
     /* * 주의: 실제 데이터 처리는 여기서 memcpy 등을 수행.
      * return 0을 하면 Zephyr 스택이 버퍼 소유권을 가져가서 해제함.
