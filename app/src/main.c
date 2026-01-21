@@ -238,7 +238,7 @@ int main(void)
             // LOG_INF("CHECK POINT");
             // 1. Allocate Buffer
             // 헤드룸 예약이 필수입니다 (L2CAP 헤더 공간)
-            buf = net_buf_alloc(&tx_pool, K_MSEC(5));
+            buf = net_buf_alloc(&tx_pool, K_MSEC(100));
             if (!buf) {
                 // LOG_WRN("Tx pool empty");
                 // k_sleep(K_MSEC(1)); 
@@ -271,7 +271,7 @@ int main(void)
                 tx_failed++;
             } else {
                 // 전송 성공 시 net_buf는 스택이 알아서 해제함
-                // LOG_DBG("Sent %d bytes", DATA_SIZE);
+                LOG_INF("Sent %d bytes", DATA_SIZE);
             }
         }
 		
