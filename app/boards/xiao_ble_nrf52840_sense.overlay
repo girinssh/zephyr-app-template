@@ -11,6 +11,23 @@
 
  / {
     aliases {
-        led0 = &led0;
+        r-led = &led0;
+        g-led = &led1;
+        b-led = &led2;
+        
+    };
+    chosen {
+        // zephyr,console = &cdc_acm_uart0;
+        /delete-property/ zephyr,console;
+        /delete-property/ zephyr,shell-uart;
+        /delete-property/ zephyr,uart-mcumgr;
+        /delete-property/ zephyr,bt-mon-uart;
+        /delete-property/ zephyr,bt-c2h-uart;
     };
 };
+
+// &zephyr_udc0 {
+//     cdc_acm_uart0: cdc_acm_uart0 {
+//         compatible = "zephyr,cdc-acm-uart";
+//     };
+// };
