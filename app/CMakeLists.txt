@@ -5,11 +5,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-set(BOARD "xiao_ble/nrf52840/sense")
+# set(BOARD "xiao_ble/nrf52840/sense")
 
 cmake_minimum_required(VERSION 3.13.1)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(app LANGUAGES C)
 
-target_sources(app PRIVATE src/main.c)
+message(STATUS "Selected BOARD: '${BOARD}'")
+
+if(BOARD STREQUAL "xiao_ble/nrf52840/sense")
+    target_sources(app PRIVATE src/main_nrf52840.c)
+elseif(BOARD STREQUAL "xiao_nrf54l15")
+    target_sources(app PRIVATE src/main_nrf54l15.c)
+endif()

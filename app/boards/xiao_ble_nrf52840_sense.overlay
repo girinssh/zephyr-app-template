@@ -14,7 +14,7 @@
         r-led = &led0;
         g-led = &led1;
         b-led = &led2;
-        
+
     };
     chosen {
         // zephyr,console = &cdc_acm_uart0;

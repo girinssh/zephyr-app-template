@@ -2,22 +2,22 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
-#include <zephyr/usb/usbd.h>
+// #include <zephyr/usb/usbd.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/drivers/uart.h>
-#include <zephyr/usb/usbd.h>  // Zephyr 4.x
+// #include <zephyr/usb/usbd.h>  // Zephyr 4.x
 #include <zephyr/sys/ring_buffer.h>
 
-#include <zephyr/usb/class/usb_cdc.h>
+// #include <zephyr/usb/class/usb_cdc.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/logging/log.h>
 
-#include "led.h"
+// #include "led.h"
 
-// // LOG_MODULE_REGISTER(l2cap_rx, // LOG_LEVEL_INF);
+// LOG_MODULE_REGISTER(l2cap_rx, LOG_LEVEL_INF);
 
 volatile uint32_t dtr = 0;
 
@@ -36,39 +36,39 @@ enum UART_STATE { // BLUE + RED
     UART_CHECK
 } uart_state = UART_OFF;
 
-const enum BLINK_STATE led_combination[4][5][3] = {
-    { // BLE_OFF
-        STATE_LED_OFF,              // BLE_OFF      UART_OFF,
-        STATE_BLUE_BLINK,           // BLE_OFF      UART_CONNECTING,
-        STATE_MAGENTA_BLINK,        // BLE_OFF      UART_FAILED,
-        STATE_BLUE_ON,              // BLE_OFF      UART_CONN
-        STATE_WHITE_BLINK,              // BLE_OFF      UART_CONN
-    },
-    { // ADV
-        STATE_GREEN_BLINK,          // ADV          UART_OFF,
-        STATE_GREEN_BLUE_BLINK,     // ADV          UART_CONNECTING,
-        STATE_GREEN_MAGENTA_BLINK,  // ADV          UART_FAILED,
-        STATE_BLUE_CYAN_BLINK,      // ADV          UART_CONN
-    },
-    { // BLE FAILED
-        STATE_YELLOW_BLINK,    // ADV FAILED   UART_OFF,
-        STATE_BLUE_YELLOW_BLINK,    // ADV FAILED   UART_CONNECTING,
-        STATE_YELLOW_MAGENTA_BLINK, // ADV FAILED   UART_FAILED,
-        STATE_BLUE_WHITE_BLINK,     // ADV FAILED   UART_CONN
-    },
-    { // L2CAP_CONN
-        STATE_GREEN_ON,             // L2CAP_CONN      UART_OFF,
-        STATE_GREEN_CYAN_BLINK,     // L2CAP_CONN      UART_CONNECTING,
-        STATE_GREEN_WHITE_BLINK,    // L2CAP_CONN      UART_FAILED,
-        STATE_CYAN_ON,              // L2CAP_CONN      UART_CONN
-        STATE_GREEN_YELLOW_BLINK    // L2CAP_CONN      UART_CHECK
-    }
-};
+// const enum BLINK_STATE led_combination[4][5][3] = {
+//     { // BLE_OFF
+//         STATE_LED_OFF,              // BLE_OFF      UART_OFF,
+//         STATE_BLUE_BLINK,           // BLE_OFF      UART_CONNECTING,
+//         STATE_MAGENTA_BLINK,        // BLE_OFF      UART_FAILED,
+//         STATE_BLUE_ON,              // BLE_OFF      UART_CONN
+//         STATE_WHITE_BLINK,              // BLE_OFF      UART_CONN
+//     },
+//     { // ADV
+//         STATE_GREEN_BLINK,          // ADV          UART_OFF,
+//         STATE_GREEN_BLUE_BLINK,     // ADV          UART_CONNECTING,
+//         STATE_GREEN_MAGENTA_BLINK,  // ADV          UART_FAILED,
+//         STATE_BLUE_CYAN_BLINK,      // ADV          UART_CONN
+//     },
+//     { // BLE FAILED
+//         STATE_YELLOW_BLINK,    // ADV FAILED   UART_OFF,
+//         STATE_BLUE_YELLOW_BLINK,    // ADV FAILED   UART_CONNECTING,
+//         STATE_YELLOW_MAGENTA_BLINK, // ADV FAILED   UART_FAILED,
+//         STATE_BLUE_WHITE_BLINK,     // ADV FAILED   UART_CONN
+//     },
+//     { // L2CAP_CONN
+//         STATE_GREEN_ON,             // L2CAP_CONN      UART_OFF,
+//         STATE_GREEN_CYAN_BLINK,     // L2CAP_CONN      UART_CONNECTING,
+//         STATE_GREEN_WHITE_BLINK,    // L2CAP_CONN      UART_FAILED,
+//         STATE_CYAN_ON,              // L2CAP_CONN      UART_CONN
+//         STATE_GREEN_YELLOW_BLINK    // L2CAP_CONN      UART_CHECK
+//     }
+// };
 
 void update_led_state(){
-    for (int i = 0; i < 3; i++){
-        set_led_state(i, led_combination[ble_state][uart_state][i]);
-    }
+    // for (int i = 0; i < 3; i++){
+    //     set_led_state(i, led_combination[ble_state][uart_state][i]);
+    // }
 }
 
 void set_ble_state(enum BLE_STATE state){
@@ -131,7 +131,7 @@ static void connected(struct bt_conn *conn, uint8_t err) {
         return;
     }
 
-    // // LOG_INF("Bluetooth Central Connected!");
+    // printk("Bluetooth Central Connected!");
     /* 기존 참조가 있다면 해제 (방어 코드) */
     if (default_conn) {
         bt_conn_unref(default_conn);
@@ -155,12 +155,11 @@ struct bt_conn_cb conn_callbacks = {
     .disconnected = disconnected,
 };
 
-#define UART_DEVICE_NODE DT_NODELABEL(board_cdc_acm_uart)
+// #define UART_DEVICE_NODE DT_NODELABEL(board_cdc_acm_uart)
 // #define UART_DEVICE_NODE DT_NODELABEL(cdc_acm_uart0)
-// #define UART_DEVICE_NODE DT_NODELABEL(uart0)
+#define UART_DEVICE_NODE DT_NODELABEL(uart20)
 // #define UART_DEVICE_NODE DT_CHOSEN(zephyr_console)
 const struct device *uart_dev = DEVICE_DT_GET(UART_DEVICE_NODE);
-
 
 K_SEM_DEFINE(tx_data_sem, 0, 1);
 static void uart_tx_func() {
@@ -246,7 +245,7 @@ static int l2cap_send_packet(uint8_t * send_buffer)
 uint8_t cmd_buf[4];
 int buf_idx = 0;
 
-static void cdc_rx_isr(const struct device *dev, void *user_data)
+static void uart_rx_isr(const struct device *dev, void *user_data)
 {
     uint8_t b;
     uint8_t rx_char;
@@ -278,9 +277,9 @@ static void cdc_rx_isr(const struct device *dev, void *user_data)
     }
 }
 
-void enable_cdc_rx_irq(const struct device *dev)
+void enable_uart_rx_irq(const struct device *dev)
 {
-    uart_irq_callback_user_data_set(dev, cdc_rx_isr, NULL);
+    uart_irq_callback_user_data_set(dev, uart_rx_isr, NULL);
     uart_irq_rx_enable(dev);
 }
 
@@ -311,7 +310,7 @@ static void send_packet(const uint8_t *data, size_t len)
 }
 
 static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf){
-    uart_line_ctrl_get(uart_dev, UART_LINE_CTRL_DTR, &dtr); 
+    // uart_line_ctrl_get(uart_dev, UART_LINE_CTRL_DTR, &dtr); 
     if(dtr && (uart_state == UART_CONN || uart_state == UART_CHECK)){
         send_packet(buf->data, buf->len);
     }
@@ -327,8 +326,8 @@ static void l2cap_connected(struct bt_l2cap_chan *chan) {
 static void l2cap_disconnected(struct bt_l2cap_chan *chan) {
 	chan->conn = NULL;
 }
-#define L2CAP_RX_BUF_COUNT 4
-#define L2CAP_RX_BUF_SIZE 256
+#define L2CAP_RX_BUF_COUNT 200
+#define L2CAP_RX_BUF_SIZE 255
 
 NET_BUF_POOL_FIXED_DEFINE(l2cap_rx_pool, 
                           L2CAP_RX_BUF_COUNT,
@@ -373,8 +372,6 @@ static struct bt_l2cap_server server = {
     .accept    = l2cap_accept,
 };
 
-
-
 int configureUART(){
     int err;
     err = !device_is_ready(uart_dev);
@@ -395,6 +392,7 @@ int configureUART(){
     err = uart_configure(uart_dev, &uart_cfg);
     if (err) {
         set_uart_state(UART_FAILED);
+        dtr = false;
         return -1;
     }
 
@@ -402,7 +400,9 @@ int configureUART(){
 
     set_uart_state(UART_CONNECTING);
 
-    enable_cdc_rx_irq(uart_dev);
+    enable_uart_rx_irq(uart_dev);
+
+    dtr = true;
     return 0;
 }
 
@@ -410,7 +410,7 @@ int main(void) {
     int err;
 
 	// LOG_INF("L2CAP Receiver Start");
-    configure_led();
+    // configure_led();
     /* 1. USB 초기화 (Console over USB) */
 
     err = bt_conn_cb_register(&conn_callbacks);
@@ -447,11 +447,12 @@ int main(void) {
         k_sleep(K_MSEC(1000));
 
 		while(true){
-            uart_line_ctrl_get(uart_dev, UART_LINE_CTRL_DTR, &dtr); 
-            if(!dtr && uart_state != UART_CONNECTING) { 
+            // uart_line_ctrl_get(uart_dev, UART_LINE_CTRL_DTR, &dtr); 
+
+            /*if(!dtr && uart_state != UART_CONNECTING) { 
                 set_uart_state(UART_CONNECTING);
 
-            } else if(dtr && uart_state == UART_CONNECTING){
+            } else */if(dtr && uart_state == UART_CONNECTING){
                 ring_buf_reset(&tx_ringbuf);
                 k_sem_reset(&tx_done_sem);
                 set_uart_state(UART_CONN);
